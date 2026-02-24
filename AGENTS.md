@@ -2,6 +2,14 @@
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- This repository is a fork; keep changes modular so upstream updates stay easy to integrate.
+- Always keep `README.md` updated when behavior, scope, architecture, or developer commands change.
+- Keep `lesson.md` as a pointer to `lessons.md` so both names stay discoverable.
+- Maintain `lessons.md` using this Self-Improvement Loop:
+  - After ANY correction from the user: update `lessons.md` with the pattern.
+  - Write rules for yourself that prevent the same mistake.
+  - Ruthlessly iterate on these lessons until mistake rate drops.
+  - Review lessons at session start for the relevant project.
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
 ## Style Guide
