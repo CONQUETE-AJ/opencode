@@ -1,0 +1,23 @@
+Access connected databases directly from chat with safety guardrails.
+
+Use this tool when the user asks database questions in natural language (for example sorting/filtering/grouping rows), and translate that request into SQL.
+
+Available actions:
+- `list_connections`: list saved database connections from `/connectDB`
+- `list_tables`: list visible base tables for a connection
+- `run_query`: execute one SQL statement through the safe SQL layer
+
+Usage notes:
+- If connection is not specified:
+  - the tool auto-selects when exactly one DB is connected
+  - with multiple DBs, ask the user or choose the most explicit match
+- Connection selector accepts:
+  - exact/partial connection name
+  - connection id
+  - DB type alias (`postgres`/`postgresql`/`pg`, `mysql`, `sqlite`) when unique
+- Before writing SQL, call `list_tables` if table/schema names are unclear
+- Keep result sets focused with LIMIT when appropriate
+- Safety policy is enforced server-side:
+  - destructive/admin statements are blocked (`DROP`, `TRUNCATE`, `ALTER`, `GRANT`, `REVOKE`, etc.)
+  - writes are only allowed on `_work.*` (SQLite writes are blocked)
+  - only one statement per execution

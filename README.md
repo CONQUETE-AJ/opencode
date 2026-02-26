@@ -23,12 +23,16 @@ This fork keeps only the terminal product surface.
 ```bash
 bun install
 bun run dev
+# or use the bootstrap launcher
+./start.sh
 ```
 
 ### Terminal Commands
 
 ```bash
+./start.sh            # bootstrap deps/env then start terminal app
 bun run dev            # start terminal app
+bun run data:env       # setup isolated Python DB env (psycopg + pymysql) for /connectDB, /data, /sql
 bun run typecheck      # terminal typecheck
 bun run test:terminal  # terminal tests
 bun run build          # terminal build
@@ -42,6 +46,36 @@ This fork is being specialized for data analysis and data science workflows in t
 - profiling (schema, nulls, distributions),
 - transformations (filter/map/group/join),
 - reproducible runs and report generation.
+- interactive DB helpers in TUI:
+  - run `bun run data:env` once per machine/environment
+  - `/connectDB` to connect SQLite/PostgreSQL/MySQL databases
+  - `/data` to browse tables by connected database
+  - `/sql` to run SQL queries on a connected database with built-in safety policy
+  - chat-native DB analysis: once connected, ask in natural language in chat (the agent can use the `database` tool to list tables and execute safe SQL automatically)
+  - table mention autocomplete in chat: type `#` in prompt to suggest connected DB tables (similar to `@`)
+  - chat DB resolver accepts connection name/id and type aliases like `postgres` when unambiguous
+
+Recommended production posture for SQL execution:
+
+- connect with a dedicated restricted DB user (example: `opencode_agent`)
+- grant read-only access on source schemas (ex: `public`)
+- grant write access only on a sandbox schema (ex: `_work`)
+- keep OpenCode SQL safety policy enabled:
+  - blocks destructive/admin statements (`DROP`, `TRUNCATE`, `ALTER`, `GRANT`, `REVOKE`, etc.)
+  - allows writes only when query explicitly targets `_work.<table>`
+  - allows only one SQL statement per execution
+
+Example PostgreSQL grants:
+
+```sql
+CREATE USER opencode_agent WITH PASSWORD '...';
+
+GRANT USAGE ON SCHEMA public TO opencode_agent;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO opencode_agent;
+
+CREATE SCHEMA IF NOT EXISTS _work;
+GRANT ALL ON SCHEMA _work TO opencode_agent;
+```
 
 ### Agents
 
@@ -55,6 +89,8 @@ OpenCode includes two built-in agents you can switch between with the `Tab` key.
 
 Also included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
+
+This fork also includes a custom **data** agent for data workflows, defined in `.opencode/agent/data.md`.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 

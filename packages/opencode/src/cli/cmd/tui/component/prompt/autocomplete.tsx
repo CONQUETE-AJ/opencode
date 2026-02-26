@@ -13,6 +13,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
+import { DataDB } from "@/data/db"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -49,7 +50,7 @@ function extractLineRange(input: string) {
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
-  visible: false | "@" | "/"
+  visible: false | "@" | "/" | "#"
 }
 
 export type AutocompleteOption = {
@@ -218,6 +219,27 @@ export function Autocomplete(props: {
     }
   }
 
+  function insertTag(text: string) {
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const charAfterCursor = props.value.at(currentCursorOffset)
+    const needsSpace = charAfterCursor !== " "
+    const append = "#" + text + (needsSpace ? " " : "")
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(append)
+
+    props.setPrompt((draft) => {
+      draft.input = input.plainText
+    })
+  }
+
   const [files] = createResource(
     () => search(),
     async (query) => {
@@ -353,6 +375,41 @@ export function Autocomplete(props: {
       )
   })
 
+  const [tables] = createResource(
+    () => store.visible === "#",
+    async (showing) => {
+      if (!showing) return []
+
+      const rows = await DataDB.list()
+      if (!rows.length) return []
+
+      const width = props.anchor().width - 4
+      const data = await Promise.all(
+        rows.map(async (item) => ({
+          connection: item,
+          result: await DataDB.tables(item),
+        })),
+      )
+
+      return data.flatMap(({ connection, result }) =>
+        result.error
+          ? []
+          : result.tables.map((table) => {
+              const value = `${table.schema}.${table.name}`
+              return {
+                display: "#" + Locale.truncateMiddle(value, width),
+                value,
+                description: connection.name,
+                onSelect: () => insertTag(value),
+              } satisfies AutocompleteOption
+            }),
+      )
+    },
+    {
+      initialValue: [],
+    },
+  )
+
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...command.slashes()]
 
@@ -386,23 +443,40 @@ export function Autocomplete(props: {
     const filesValue = files()
     const agentsValue = agents()
     const commandsValue = commands()
+    const tablesValue = tables()
 
     const mixed: AutocompleteOption[] =
-      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
+      store.visible === "@"
+        ? [...agentsValue, ...(filesValue || []), ...mcpResources()]
+        : store.visible === "#"
+          ? [...tablesValue]
+          : [...commandsValue]
 
     const searchValue = search()
+
+    if (store.visible === "#" && !tables.loading && !mixed.length) {
+      return [
+        {
+          display: "#",
+          value: "#",
+          description: "No tables found. Connect a DB with /connectDB.",
+          disabled: true,
+        },
+      ]
+    }
 
     if (!searchValue) {
       return mixed
     }
 
-    if (files.loading && prev && prev.length > 0) {
+    if ((files.loading || tables.loading) && prev && prev.length > 0) {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
+    const query = store.visible === "@" ? removeLineRange(searchValue) : searchValue
+    const result = fuzzysort.go(query, mixed, {
       keys: [
-        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+        (obj) => (store.visible === "@" ? removeLineRange((obj.value ?? obj.display).trimEnd()) : (obj.value ?? obj.display).trimEnd()),
         "description",
         (obj) => obj.aliases?.join(" ") ?? "",
       ],
@@ -450,6 +524,7 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
+    if (selected.disabled) return
     hide()
     selected.onSelect?.()
   }
@@ -475,7 +550,7 @@ export function Autocomplete(props: {
     setStore("selected", 0)
   }
 
-  function show(mode: "@" | "/") {
+  function show(mode: "@" | "/" | "#") {
     command.keybinds(false)
     setStore({
       visible: mode,
@@ -530,15 +605,23 @@ export function Autocomplete(props: {
 
         // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
         const text = value.slice(0, offset)
-        const idx = text.lastIndexOf("@")
-        if (idx === -1) return
+        const matches = (["@", "#"] as const)
+          .map((item) => {
+            const idx = text.lastIndexOf(item)
+            if (idx === -1) return
+            const between = text.slice(idx)
+            const before = idx === 0 ? undefined : value[idx - 1]
+            if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+              return { item, idx }
+            }
+          })
+          .filter((item): item is { item: "@" | "#"; idx: number } => item !== undefined)
+          .toSorted((a, b) => b.idx - a.idx)
 
-        const between = text.slice(idx)
-        const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
-          show("@")
-          setStore("index", idx)
-        }
+        const next = matches[0]
+        if (!next) return
+        show(next.item)
+        setStore("index", next.idx)
       },
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
@@ -587,6 +670,14 @@ export function Autocomplete(props: {
               cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
             const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
             if (canTrigger) show("@")
+          }
+
+          if (e.name === "#") {
+            const cursorOffset = props.input().cursorOffset
+            const charBeforeCursor =
+              cursorOffset === 0 ? undefined : props.input().getTextRange(cursorOffset - 1, cursorOffset)
+            const canTrigger = charBeforeCursor === undefined || charBeforeCursor === "" || /\s/.test(charBeforeCursor)
+            if (canTrigger) show("#")
           }
 
           if (e.name === "/") {

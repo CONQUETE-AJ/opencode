@@ -9,6 +9,7 @@ import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { openConnectDB, openData, openSQL } from "@tui/component/dialog-data"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -506,6 +507,40 @@ function App() {
         dialog.replace(() => <DialogProviderList />)
       },
       category: "Provider",
+    },
+    {
+      title: "Connect database",
+      value: "data.connect",
+      slash: {
+        name: "connectDB",
+        aliases: ["connectdb"],
+      },
+      onSelect: () => {
+        openConnectDB({ dialog, toast })
+      },
+      category: "Data",
+    },
+    {
+      title: "View database tables",
+      value: "data.tables",
+      slash: {
+        name: "data",
+      },
+      onSelect: () => {
+        openData({ dialog, toast })
+      },
+      category: "Data",
+    },
+    {
+      title: "Run SQL query",
+      value: "data.sql",
+      slash: {
+        name: "sql",
+      },
+      onSelect: () => {
+        openSQL({ dialog, toast })
+      },
+      category: "Data",
     },
     {
       title: "View status",
