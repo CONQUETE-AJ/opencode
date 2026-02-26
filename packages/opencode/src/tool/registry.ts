@@ -5,6 +5,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
+import { DataTool } from "./data"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -103,6 +104,7 @@ export namespace ToolRegistry {
       ...(question ? [QuestionTool] : []),
       BashTool,
       ReadTool,
+      DataTool,
       GlobTool,
       GrepTool,
       EditTool,
